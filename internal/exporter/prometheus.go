@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -64,4 +65,40 @@ func (e *PromExporter) Update(stats []komodo.ImportantStats) {
 
 func MetricsHandler() http.Handler {
 	return promhttp.Handler()
+}
+
+type ScrapeMetrics struct {
+	duration    prometheus.Histogram
+	errors      prometheus.Counter
+	lastSuccess prometheus.Gauge
+}
+
+func NewScrapeMetrics(reg prometheus.Registerer) *ScrapeMetrics {
+	m := &ScrapeMetrics{
+		duration: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "komodo_scrape_duration_seconds",
+			Help:    "Duration of the last Komodo scrape in seconds.",
+			Buckets: prometheus.DefBuckets,
+		}),
+		errors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "komodo_scrape_errors_total",
+			Help: "Total number of Komodo scrape errors.",
+		}),
+		lastSuccess: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "komodo_scrape_last_success_timestamp",
+			Help: "Unix timestamp of the last successful Komodo scrape.",
+		}),
+	}
+
+	reg.MustRegister(m.duration, m.errors, m.lastSuccess)
+	return m
+}
+
+func (m *ScrapeMetrics) Observe(err error, elapsed time.Duration) {
+	m.duration.Observe(elapsed.Seconds())
+	if err != nil {
+		m.errors.Inc()
+		return
+	}
+	m.lastSuccess.Set(float64(time.Now().Unix()))
 }
