@@ -3,10 +3,8 @@ package exporter
 import (
 	"net/http"
 	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	"komodo-exporter/internal/komodo"
 )
 
@@ -95,10 +93,19 @@ func NewScrapeMetrics(reg prometheus.Registerer) *ScrapeMetrics {
 }
 
 func (m *ScrapeMetrics) Observe(err error, elapsed time.Duration) {
-	m.duration.Observe(elapsed.Seconds())
-	if err != nil {
-		m.errors.Inc()
-		return
-	}
-	m.lastSuccess.Set(float64(time.Now().Unix()))
+    m.duration.Observe(elapsed.Seconds())
+    if err != nil {
+        m.errors.Inc()
+        return
+    }
+    m.lastSuccess.Set(float64(time.Now().Unix()))
+}
+
+func (e *PromExporter) Reset() {
+    e.cpuPerc.Reset()
+    e.memFree.Reset()
+    e.memUsed.Reset()
+    e.memTotal.Reset()
+    e.netIn.Reset()
+    e.netOut.Reset()
 }
