@@ -59,17 +59,14 @@ type scraper struct {
 }
 
 func (s *scraper) run(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	start := time.Now()
-	stats, err := s.collector.CollectImportantStats(ctx)
-	if err == nil {
-		s.exporter.Update(stats)
-	}
-
-	s.metrics.Observe(err, time.Since(start))
-	return err
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    start := time.Now()
+    stats, err := s.collector.CollectImportantStats(ctx)
+    s.exporter.Reset()
+    s.exporter.Update(stats)
+    s.metrics.Observe(err, time.Since(start))
+    return err
 }
 
 func main() {

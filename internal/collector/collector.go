@@ -3,14 +3,14 @@ package collector
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
-
 	"komodo-exporter/internal/komodo"
 )
 
 type Collector struct {
-	Komodo       *komodo.Client
-	MaxConcurrent int // e.g. 5-10
+	Komodo        *komodo.Client
+	MaxConcurrent int
 	OnlyOk        bool
 }
 
@@ -28,32 +28,30 @@ func (c *Collector) CollectImportantStats(ctx context.Context) ([]komodo.Importa
 	type result struct {
 		stat komodo.ImportantStats
 		err  error
+		name string
+		id   string
 	}
 
 	sem := make(chan struct{}, maxConc)
 	outCh := make(chan result, len(servers))
-
 	var wg sync.WaitGroup
-	for _, s := range servers {
-		s := s // capture
 
+	for _, s := range servers {
+		s := s
 		if c.OnlyOk && s.Info.State != "Ok" {
 			continue
 		}
-
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
 			st, err := c.Komodo.GetSystemStats(ctx, s.ID)
 			if err != nil {
-				outCh <- result{err: fmt.Errorf("get stats for %s (%s): %w", s.Name, s.ID, err)}
+				outCh <- result{err: fmt.Errorf("get stats for %s (%s): %w", s.Name, s.ID, err), name: s.Name, id: s.ID}
 				return
 			}
-
 			outCh <- result{
 				stat: komodo.ImportantStats{
 					ServerID:            s.ID,
@@ -74,15 +72,20 @@ func (c *Collector) CollectImportantStats(ctx context.Context) ([]komodo.Importa
 	close(outCh)
 
 	stats := make([]komodo.ImportantStats, 0, len(servers))
+	var errs []error
 
-	// Choose behavior:
-	// - If ANY error should fail the scrape, return the first error.
-	// - Or accumulate partial results and log errors elsewhere.
 	for r := range outCh {
 		if r.err != nil {
-			return nil, r.err
+			errs = append(errs, r.err)
+			continue
 		}
 		stats = append(stats, r.stat)
+	}
+
+	if len(errs) > 0 {
+		for _, e := range errs {
+			log.Printf("collect error: %v", e)
+		}
 	}
 
 	return stats, nil
